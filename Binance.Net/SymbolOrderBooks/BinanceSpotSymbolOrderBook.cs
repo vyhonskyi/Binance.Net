@@ -24,6 +24,10 @@ namespace Binance.Net.SymbolOrderBooks
         private readonly bool _socketOwner;
         private readonly int? _updateInterval;
 
+        public event Action<DataEvent<IBinanceOrderBook>>? OnOrderBook;
+        public event Action<DataEvent<IBinanceEventOrderBook>>? OnOrderBookUpdate;
+        public event Action<DataEvent<IBinanceOrderBook>>? OnPartialOrderBookUpdate;
+
         /// <summary>
         /// Create a new instance
         /// </summary>
@@ -49,9 +53,19 @@ namespace Binance.Net.SymbolOrderBooks
         {
             CallResult<UpdateSubscription> subResult;
             if (Levels == null)
-                subResult = await _socketClient.SpotApi.ExchangeData.SubscribeToOrderBookUpdatesAsync(Symbol, _updateInterval, HandleUpdate).ConfigureAwait(false);
+                subResult = await _socketClient.SpotApi.ExchangeData.SubscribeToOrderBookUpdatesAsync(
+                    Symbol, _updateInterval, data =>
+                    {
+                        HandleUpdate(data);
+                        OnOrderBookUpdate?.Invoke(data);
+                    }).ConfigureAwait(false);
             else
-                subResult = await _socketClient.SpotApi.ExchangeData.SubscribeToPartialOrderBookUpdatesAsync(Symbol, Levels.Value, _updateInterval, HandleUpdate).ConfigureAwait(false);
+                subResult = await _socketClient.SpotApi.ExchangeData.SubscribeToPartialOrderBookUpdatesAsync(
+                    Symbol, Levels.Value, _updateInterval, data =>
+                    {
+                        HandleUpdate(data);
+                        OnPartialOrderBookUpdate?.Invoke(data);
+                    }).ConfigureAwait(false);
 
             if (!subResult)
                 return new CallResult<UpdateSubscription>(subResult.Error!);
@@ -76,6 +90,7 @@ namespace Binance.Net.SymbolOrderBooks
                 }
 
                 SetInitialOrderBook(bookResult.Data.LastUpdateId, bookResult.Data.Bids, bookResult.Data.Asks);
+                OnOrderBook?.Invoke(new DataEvent<IBinanceOrderBook>(bookResult.Data, DateTime.UtcNow));
             }
             else
             {
@@ -86,14 +101,23 @@ namespace Binance.Net.SymbolOrderBooks
             return new CallResult<UpdateSubscription>(subResult.Data);
         }
 
+        public void Set(DataEvent<IBinanceOrderBook> data)
+        {
+            SetInitialOrderBook(data.Data.LastUpdateId, data.Data.Bids, data.Data.Asks);
+        }
+
+        public void Update(DataEvent<IBinanceEventOrderBook> data)
+        {
+            HandleUpdate(data);
+        }
+
         private void HandleUpdate(DataEvent<IBinanceEventOrderBook> data)
         {
-            if(data.Data.FirstUpdateId != null)
+            if (data.Data.FirstUpdateId != null)
                 UpdateOrderBook(data.Data.FirstUpdateId.Value, data.Data.LastUpdateId, data.Data.Bids, data.Data.Asks);
             else
                 UpdateOrderBook(data.Data.LastUpdateId, data.Data.Bids, data.Data.Asks);
         }
-
 
         private void HandleUpdate(DataEvent<IBinanceOrderBook> data)
         {
@@ -119,6 +143,7 @@ namespace Binance.Net.SymbolOrderBooks
                 return new CallResult<bool>(bookResult.Error!);
 
             SetInitialOrderBook(bookResult.Data.LastUpdateId, bookResult.Data.Bids, bookResult.Data.Asks);
+            OnOrderBook?.Invoke(new DataEvent<IBinanceOrderBook>(bookResult.Data, DateTime.UtcNow));
             return new CallResult<bool>(true);
         }
 
