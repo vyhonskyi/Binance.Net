@@ -26,7 +26,6 @@ namespace Binance.Net.SymbolOrderBooks
 
         public event Action<DataEvent<IBinanceOrderBook>>? OnOrderBook;
         public event Action<DataEvent<IBinanceEventOrderBook>>? OnOrderBookUpdate;
-        public event Action<DataEvent<IBinanceOrderBook>>? OnPartialOrderBookUpdate;
 
         /// <summary>
         /// Create a new instance
@@ -64,7 +63,7 @@ namespace Binance.Net.SymbolOrderBooks
                     Symbol, Levels.Value, _updateInterval, data =>
                     {
                         HandleUpdate(data);
-                        OnPartialOrderBookUpdate?.Invoke(data);
+                        OnOrderBook?.Invoke(data);
                     }).ConfigureAwait(false);
 
             if (!subResult)
